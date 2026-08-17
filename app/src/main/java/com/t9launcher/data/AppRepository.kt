@@ -5,6 +5,8 @@ import com.t9launcher.launcher.AppScanner
 import com.t9launcher.pinyin.PinyinConverter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class AppRepository(
@@ -12,6 +14,9 @@ class AppRepository(
     private val db: AppDatabase,
     private val scanner: AppScanner
 ) {
+
+    /** 串行化所有扫描，避免并发 rescan 互相覆盖（尤其固定状态）。 */
+    private val rescanMutex = Mutex()
 
     val allApps: Flow<List<AppEntity>> = dao.getAll()
 
@@ -24,10 +29,10 @@ class AppRepository(
 
     /**
      * 重新扫描已安装应用并重建索引。
-     * 保留已有的 lastOpenedTime / openCount 统计。
+     * 保留已有的 lastOpenedTime / openCount / pinned 统计。
      * @return 本次扫描到的可启动应用数量。
      */
-    suspend fun rescan(): Int {
+    suspend fun rescan(): Int = rescanMutex.withLock {
         val scanned = withContext(Dispatchers.IO) { scanner.scan() }
         db.withTransaction {
             val existing = dao.getAllOnce().associateBy { it.componentName }
@@ -52,7 +57,7 @@ class AppRepository(
             dao.clearAll()
             dao.upsertAll(entities)
         }
-        return scanned.size
+        scanned.size
     }
 
     fun pinnedApps(): Flow<List<AppEntity>> = dao.pinnedApps()

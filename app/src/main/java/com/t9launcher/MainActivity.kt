@@ -24,8 +24,21 @@ class MainActivity : ComponentActivity() {
     private val packageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val pkg = intent?.data?.schemeSpecificPart
-            if (!pkg.isNullOrEmpty()) {
-                viewModel.rescan()
+            if (pkg.isNullOrEmpty()) return
+            // 只对真正的安装/卸载/更新触发重扫，忽略含自身在内的普通状态变化广播，
+            // 避免运行期间频繁无意义重扫导致固定状态被刷新。
+            when (intent?.action) {
+                Intent.ACTION_PACKAGE_ADDED,
+                Intent.ACTION_PACKAGE_REMOVED,
+                Intent.ACTION_PACKAGE_REPLACED -> viewModel.rescan()
+                Intent.ACTION_PACKAGE_CHANGED -> {
+                    // 仅当组件确实变化（如组件启用/禁用）时才重扫
+                    val changedComponents =
+                        intent.getStringArrayExtra(Intent.EXTRA_CHANGED_COMPONENT_NAME_LIST)
+                    if (!changedComponents.isNullOrEmpty()) {
+                        viewModel.rescan()
+                    }
+                }
             }
         }
     }
