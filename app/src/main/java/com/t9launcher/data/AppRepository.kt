@@ -1,0 +1,71 @@
+package com.t9launcher.data
+
+import androidx.room.withTransaction
+import com.t9launcher.launcher.AppScanner
+import com.t9launcher.pinyin.PinyinConverter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+
+class AppRepository(
+    private val dao: AppDao,
+    private val db: AppDatabase,
+    private val scanner: AppScanner
+) {
+
+    val allApps: Flow<List<AppEntity>> = dao.getAll()
+
+    /** 首次启动时若数据库为空则扫描。 */
+    suspend fun ensureScanned() {
+        if (dao.count() == 0) {
+            rescan()
+        }
+    }
+
+    /**
+     * 重新扫描已安装应用并重建索引。
+     * 保留已有的 lastOpenedTime / openCount 统计。
+     * @return 本次扫描到的可启动应用数量。
+     */
+    suspend fun rescan(): Int {
+        val scanned = withContext(Dispatchers.IO) { scanner.scan() }
+        db.withTransaction {
+            val existing = dao.getAllOnce().associateBy { it.componentName }
+            val entities = scanned.map { s ->
+                val old = existing[s.componentName]
+                val index = PinyinConverter.toIndex(s.appName)
+                AppEntity(
+                    componentName = s.componentName,
+                    packageName = s.packageName,
+                    appName = s.appName,
+                    normalizedName = s.appName.lowercase().trim(),
+                    pinyin = index.pinyin,
+                    pinyinCompact = index.pinyinCompact,
+                    initials = index.initials,
+                    t9Full = index.t9Full,
+                    t9Initials = index.t9Initials,
+                    lastOpenedTime = old?.lastOpenedTime ?: 0L,
+                    openCount = old?.openCount ?: 0,
+                    pinned = old?.pinned ?: false
+                )
+            }
+            dao.clearAll()
+            dao.upsertAll(entities)
+        }
+        return scanned.size
+    }
+
+    fun pinnedApps(): Flow<List<AppEntity>> = dao.pinnedApps()
+
+    fun recentApps(limit: Int): Flow<List<AppEntity>> = dao.recentApps(limit)
+
+    suspend fun recordOpen(componentName: String) {
+        dao.recordOpen(componentName, System.currentTimeMillis())
+    }
+
+    suspend fun setPinned(componentName: String, pinned: Boolean) {
+        dao.setPinned(componentName, pinned)
+    }
+
+    suspend fun clearUsage() = dao.clearUsage()
+}
