@@ -64,7 +64,12 @@ object SearchEngine {
         }
 
         // 6. 模糊匹配（包含）
-        if (name.contains(q) || compact.contains(q) || initials.contains(q) || t9Full.contains(q)) {
+        if (name.contains(q) ||
+            compact.contains(q) ||
+            initials.contains(q) ||
+            t9Full.contains(q) ||
+            t9Initials.contains(q)
+        ) {
             return MatchType.FUZZY
         }
 

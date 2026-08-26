@@ -111,6 +111,23 @@ class SearchEngineTest {
     }
 
     @Test
+    fun `T9数字5794匹配建设银行`() {
+        // 建设银行 首字母 jsyh -> T9 = 5794，应精确匹配
+        val results = SearchEngine.search(
+            "5794",
+            listOf(app("建设银行"), app("招商银行"))
+        )
+        assertEquals("建设银行", results.first().app.appName)
+
+        // 中国建设银行 首字母 zgjsyh -> T9 = 9455794，输入 5794 应作为子串匹配到
+        val results2 = SearchEngine.search(
+            "5794",
+            listOf(app("中国建设银行"), app("招商银行"))
+        )
+        assertTrue(results2.any { it.app.appName == "中国建设银行" })
+    }
+
+    @Test
     fun `匹配度优先于使用次数`() {
         // 微信：拼音完全匹配，但使用次数低
         val exact = app("微信", openCount = 1, lastOpened = 100L)
