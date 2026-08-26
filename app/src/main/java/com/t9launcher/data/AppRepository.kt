@@ -65,12 +65,19 @@ class AppRepository(
     fun recentApps(limit: Int): Flow<List<AppEntity>> = dao.recentApps(limit)
 
     suspend fun recordOpen(componentName: String) {
-        dao.recordOpen(componentName, System.currentTimeMillis())
+        // 与 rescan 共用同一把锁，避免「记录最近打开」与「重建索引」并发交错
+        // 导致记录被 rescan 的旧数据覆盖丢失
+        rescanMutex.withLock {
+            dao.recordOpen(componentName, System.currentTimeMillis())
+        }
     }
 
     suspend fun setPinned(componentName: String, pinned: Boolean) {
-        dao.setPinned(componentName, pinned)
+        // 与 recordOpen 同理：固定操作也要与 rescan 串行，避免被覆盖
+        rescanMutex.withLock {
+            dao.setPinned(componentName, pinned)
+        }
     }
 
-    suspend fun clearUsage() = dao.clearUsage()
+    suspend fun clearUsage() = rescanMutex.withLock { dao.clearUsage() }
 }
