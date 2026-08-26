@@ -50,7 +50,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
-        viewModelScope.launch { repository.ensureScanned() }
+        // 每次启动实时扫描，自动加载新安装的应用（后台执行，UI 先显示缓存）
+        viewModelScope.launch { repository.rescan() }
     }
 
     fun appendDigit(digit: Char) {

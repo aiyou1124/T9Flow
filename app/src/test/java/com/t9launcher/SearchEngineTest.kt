@@ -94,6 +94,23 @@ class SearchEngineTest {
     }
 
     @Test
+    fun `首字母子串jsyh匹配中国建设银行`() {
+        val results = SearchEngine.search(
+            "jsyh",
+            listOf(app("中国建设银行"), app("招商银行"), app("Chrome"))
+        )
+        assertTrue(results.any { it.app.appName == "中国建设银行" })
+
+        // 若存在「建设银行」，其首字母完全匹配应排在「中国建设银行」（子串模糊匹配）之前
+        val results2 = SearchEngine.search(
+            "jsyh",
+            listOf(app("中国建设银行"), app("建设银行"))
+        )
+        assertEquals("建设银行", results2.first().app.appName)
+        assertTrue(results2.any { it.app.appName == "中国建设银行" })
+    }
+
+    @Test
     fun `匹配度优先于使用次数`() {
         // 微信：拼音完全匹配，但使用次数低
         val exact = app("微信", openCount = 1, lastOpened = 100L)
