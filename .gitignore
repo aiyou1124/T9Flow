@@ -1,17 +1,18 @@
-*.iml
-.gradle
-/local.properties
-/.idea
-.DS_Store
-build/
-/captures
-.externalNativeBuild
-.cxx
+.gradle/
+**/build/
 local.properties
-
-# 签名密钥（切勿提交到公开仓库）
-/keystore/
-
-# Reasonix 工作目录
-/.reasonix/
-
+.idea/
+*.iml
+*.apk
+*.aab
+*.jks
+*.keystore
+*.p12
+*.pfx
+key.properties
+keystore.properties
+.env
+.env.*
+.DS_Store
+captures/
+.cxx/
