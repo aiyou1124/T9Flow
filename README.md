@@ -2,7 +2,7 @@
 
 一款专注于中文姓名 T9 搜索的原生 Android 拨号助手。用九宫格快速找到联系人，点击即可直接拨打；接听和通话界面由手机的系统电话应用提供。
 
-**[下载 APK](https://github.com/aiyou1124/T9Flow/releases) · [功能介绍](#主要功能) · [使用说明](#使用说明) · [源码构建](#源码构建)**
+**[下载 APK](https://github.com/aiyou1124/T9Flow/releases) · [界面预览](#界面预览) · [功能介绍](#主要功能) · [使用说明](#使用说明) · [源码构建](#源码构建)**
 
 | 项目 | 信息 |
 | --- | --- |
@@ -11,6 +11,18 @@
 | 应用名称 | 轻拨 |
 | 应用包名 | `com.qingdial.app` |
 | 开发技术 | Java 17、原生 Android View |
+
+## 界面预览
+
+以下图片基于应用实际界面渲染，**姓名、号码、通话时间和时长均为虚构演示数据**。图片不读取真实通讯录或通话记录，不包含设备状态栏、通知、账号信息或个人截图。
+
+| 拨号首页与联系人置顶 | 中文 T9 匹配与汉字高亮 | 置顶顺序调整 |
+| :---: | :---: | :---: |
+| <img src="docs/images/01-dialer.png" alt="拨号首页，展示虚构联系人与置顶顺序" width="240"> | <img src="docs/images/02-t9-search.png" alt="输入 97 后按顺序匹配姓名并高亮汉字" width="240"> | <img src="docs/images/03-pin-order.png" alt="统一主题的联系人置顶排序菜单" width="240"> |
+
+| 最近通话与时长统计 | 联系人独立详情 | 主题设置界面 |
+| :---: | :---: | :---: |
+| <img src="docs/images/04-call-history.png" alt="虚构通话记录及呼入呼出次数与时长" width="240"> | <img src="docs/images/05-contact-details.png" alt="虚构联系人详情及该号码的通话统计" width="240"> | <img src="docs/images/06-settings.png" alt="应用设置、权限入口与按键反馈选项" width="240"> |
 
 ## 下载与安装
 
