@@ -9,7 +9,6 @@ import android.net.Uri;
 import android.os.*;
 import android.provider.CallLog;
 import android.provider.Settings;
-import android.telecom.TelecomManager;
 import android.view.Gravity;
 import android.widget.*;
 import java.text.SimpleDateFormat;
@@ -22,6 +21,7 @@ public class ContactDetailsActivity extends HomeAwareActivity {
     private final Handler handler=new Handler(Looper.getMainLooper());
     private LinearLayout content;
     private String name,number;
+    private TextView pinButton;
     private static class Record{int type;long date,seconds;Record(int t,long d,long s){type=t;date=d;seconds=s;}}
     @Override public void onCreate(Bundle state){
         super.onCreate(state);name=getIntent().getStringExtra("name");number=getIntent().getStringExtra("number");if(name==null||name.isEmpty())name=number==null?"未知号码":number;
@@ -30,9 +30,12 @@ public class ContactDetailsActivity extends HomeAwareActivity {
         ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);content=Ui.column(this);content.setPadding(0,Ui.dp(this,16),0,Ui.dp(this,20));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout identity=Ui.column(this);identity.setPadding(Ui.dp(this,20),Ui.dp(this,20),Ui.dp(this,20),Ui.dp(this,20));identity.setBackground(Ui.bg(0xffffffff,Ui.dp(this,20)));
         TextView title=Ui.text(this,name,26,0xff299e69);title.setTypeface(null,android.graphics.Typeface.BOLD);identity.addView(title);TextView phone=Ui.text(this,number==null?"隐藏号码":number,18,Ui.MUTED);phone.setTextIsSelectable(true);phone.setPadding(0,Ui.dp(this,6),0,Ui.dp(this,18));identity.addView(phone);
-        TextView dial=Ui.button(this,"拨打此号码",0xffffffff,this::dial);dial.setBackground(Ui.bg(Ui.GREEN,Ui.dp(this,23)));identity.addView(dial,new LinearLayout.LayoutParams(-1,Ui.dp(this,46)));content.addView(identity);
+        TextView dial=Ui.button(this,"拨打电话",0xffffffff,this::dial);dial.setBackground(Ui.bg(Ui.GREEN,Ui.dp(this,23)));identity.addView(dial,new LinearLayout.LayoutParams(-1,Ui.dp(this,46)));content.addView(identity);
+        pinButton=Ui.button(this,"",Ui.GREEN,()->ContactPins.actions(this,name,number,this::refreshPinButton));
+        pinButton.setContentDescription("联系人置顶与排序");pinButton.setPadding(0,Ui.dp(this,8),0,0);identity.addView(pinButton,new LinearLayout.LayoutParams(-1,Ui.dp(this,48)));refreshPinButton();
         TextView loading=Ui.text(this,"正在读取此号码的通话记录…",13,Ui.MUTED);loading.setPadding(Ui.dp(this,8),Ui.dp(this,22),0,0);content.addView(loading);root.requestFocus();load(loading);
     }
+    private void refreshPinButton(){int at=ContactPins.read(this).position(name,number);pinButton.setText(at<0?"置顶联系人":"已置顶 · 第 "+(at+1)+" 位 · 调整顺序");pinButton.setVisibility(PinOrder.key(name,number).isEmpty()?android.view.View.GONE:android.view.View.VISIBLE);}
     private static String canonical(String number){if(number==null)return "";String d=SearchIndex.digits(number);if(d.length()==13&&d.startsWith("861"))return d.substring(2);if(d.length()==15&&d.startsWith("00861"))return d.substring(4);return d;}
     private void load(TextView loading){
         if(checkSelfPermission(Manifest.permission.READ_CALL_LOG)!=PackageManager.PERMISSION_GRANTED){loading.setText("允许读取通话记录后，可查看此号码的详情");content.addView(Ui.button(this,"管理通话记录权限",Ui.GREEN,()->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())))));return;}
@@ -66,6 +69,6 @@ public class ContactDetailsActivity extends HomeAwareActivity {
         }
     }
     private void stat(LinearLayout parent,String label,String value,int color,int background){LinearLayout card=Ui.column(this);card.setPadding(Ui.dp(this,14),Ui.dp(this,12),Ui.dp(this,8),Ui.dp(this,10));card.setBackground(Ui.bg(background,Ui.dp(this,16)));card.addView(Ui.text(this,label,12,color));TextView v=Ui.text(this,value,19,color);v.setTypeface(null,android.graphics.Typeface.BOLD);card.addView(v);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1);lp.setMargins(Ui.dp(this,3),0,Ui.dp(this,3),0);parent.addView(card,lp);}
-    private void dial(){if(number==null||!number.matches("[+0-9*#(),; .-]+")){Toast.makeText(this,"没有可拨打的号码",Toast.LENGTH_SHORT).show();return;}if(checkSelfPermission(Manifest.permission.CALL_PHONE)!=PackageManager.PERMISSION_GRANTED){Toast.makeText(this,"请在应用设置中允许电话权限",Toast.LENGTH_SHORT).show();return;}try{getSystemService(TelecomManager.class).placeCall(Uri.fromParts("tel",number.replace(" ","").replace("-",""),null),new Bundle());}catch(SecurityException|IllegalArgumentException e){Toast.makeText(this,"拨号失败，请检查系统权限和 SIM 卡",Toast.LENGTH_SHORT).show();}}
+    private void dial(){SystemDialer.open(this,number);}
     @Override public void onDestroy(){super.onDestroy();handler.removeCallbacksAndMessages(null);worker.shutdownNow();}
 }

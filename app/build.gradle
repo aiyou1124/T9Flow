@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'com.qingdial.app'
     compileSdk 36
-    defaultConfig { applicationId 'com.qingdial.app'; minSdk 29; targetSdk 36; versionCode 22; versionName '1.5.8'; testInstrumentationRunner 'com.qingdial.app.FastHomeInstrumentation' }
+    defaultConfig { applicationId 'com.qingdial.app'; minSdk 29; targetSdk 36; versionCode 26; versionName '2.0.3'; testInstrumentationRunner 'com.qingdial.app.FastHomeInstrumentation' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     lint { abortOnError true }
 }

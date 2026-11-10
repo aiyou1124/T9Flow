@@ -9,7 +9,6 @@ import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.*;
 import android.provider.Settings;
-import android.telecom.TelecomManager;
 import android.view.*;
 import android.widget.*;
 
@@ -30,23 +29,22 @@ public class SettingsActivity extends HomeAwareActivity {
         ImageView icon=new ImageView(this);icon.setImageResource(R.mipmap.ic_launcher);brand.addView(icon,new LinearLayout.LayoutParams(Ui.dp(this,56),Ui.dp(this,56)));
         LinearLayout text=Ui.column(this);text.setPadding(Ui.dp(this,14),0,0,0);TextView name=Ui.text(this,"轻拨",23,Ui.INK);name.setTypeface(null,Typeface.BOLD);text.addView(name);text.addView(Ui.text(this,"中文 T9 · 简单联系",12,Ui.MUTED));brand.addView(text,new LinearLayout.LayoutParams(0,-2,1));
         TextView version=Ui.text(this,versionName(),12,Ui.GREEN);brand.addView(version);body.addView(brand);
-        boolean defaultPhone=getPackageName().equals(getSystemService(TelecomManager.class).getDefaultDialerPackage());
         boolean contacts=checkSelfPermission(Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED;
-        boolean logs=checkSelfPermission(Manifest.permission.READ_CALL_LOG)==PackageManager.PERMISSION_GRANTED;
-        section("电话服务");LinearLayout service=card();
-        row(service,AppIcon.PHONE,"默认电话与权限",defaultPhone&&contacts&&logs?"已启用 · 通讯录与通话记录可用":"完成设置，启用完整拨号体验",defaultPhone&&contacts&&logs?"已启用":"去设置",()->result("setup",0));
+        section("搜索与拨号");LinearLayout service=card();
+        row(service,AppIcon.CONTACTS,"通讯录权限",contacts?"已允许 · 姓名与号码仅在本机匹配":"允许后启用中文 T9 搜索",contacts?"已允许":"去设置",()->result("setup",0));
+        row(service,AppIcon.PHONE,"系统电话","点击直接拨打，接听和通话界面由系统处理","系统接管",()->SystemDialer.open(this,null));
+        row(service,AppIcon.RECENTS,"通话记录统计","只读取已有记录，用于次数与时长统计",null,()->result("tab",2));
         section("使用体验");LinearLayout experience=card();
         toggle(experience,AppIcon.RECENTS,"按键音","短促拨号音，静音模式下不播放","sound",true);
         toggle(experience,AppIcon.KEYPAD,"触感反馈","按下数字时轻振，跟随系统触感设置","haptic",true);
-        toggle(experience,AppIcon.PHONE,"双卡拨号按钮","开启后，两张可用 SIM 卡分别显示拨号键","dual_sim_buttons",false);
         section("快捷入口");LinearLayout shortcuts=card();
         row(shortcuts,AppIcon.CONTACTS,"通讯录","查看本机联系人",null,()->result("tab",1));
-        row(shortcuts,AppIcon.RECENTS,"最近通话","查看和回拨最近的电话",null,()->result("tab",2));
+        row(shortcuts,AppIcon.RECENTS,"最近通话","呼入、呼出次数及通话时长统计",null,()->result("tab",2));
+        row(shortcuts,AppIcon.PHONE,"打开系统电话","接听、拨出、SIM 卡选择和记录由系统管理",null,()->SystemDialer.open(this,null));
         row(shortcuts,AppIcon.KEYPAD,"拨号键盘","返回首页，快速查找并拨号",null,()->result("tab",0));
         section("系统设置");LinearLayout system=card();
-        row(system,AppIcon.SETTINGS,"应用权限","管理通讯录、电话、通知等授权",null,()->open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()))));
-        row(system,AppIcon.PHONE,"来电全屏显示","允许锁屏时显示接听界面",null,()->{if(Build.VERSION.SDK_INT>=34)open(new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,Uri.parse("package:"+getPackageName())));else Toast.makeText(this,"当前系统自动管理来电全屏显示",Toast.LENGTH_SHORT).show();});
-        row(system,AppIcon.SETTINGS,"关于轻拨","本机搜索 · 不上传通讯录",null,()->new AlertDialog.Builder(this).setTitle("轻拨 "+versionName()).setMessage("中文姓名按从左到右顺序进行 T9 匹配，橙色标出命中的字。\n\n通讯录及通话记录缓存仅保存在本机应用目录，不上传。系统权限由你授权，可随时在系统设置撤销。\n\n声音采用标准 DTMF，触感反馈跟随系统设置。").setPositiveButton("知道了",null).show());
+        row(system,AppIcon.SETTINGS,"应用权限","管理电话、通讯录与通话记录权限",null,()->open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()))));
+        row(system,AppIcon.SETTINGS,"关于轻拨","本机搜索 · 不上传通讯录",null,()->ThemeDialog.message(this,"轻拨 "+versionName(),"中文姓名按从左到右顺序进行 T9 匹配，橙色标出命中的字。\n\n通讯录索引及通话记录缓存仅保存在本机应用目录，不上传。轻拨通过系统电话服务直接发起呼叫，接听和通话界面由系统电话负责。系统权限由你授权，可随时在系统设置撤销。\n\n声音采用标准 DTMF，触感反馈跟随系统设置。",AppIcon.PHONE,"知道了",null,null,null,true));
         TextView footer=Ui.text(this,"本机处理，安心联系",12,Ui.MUTED);footer.setGravity(Gravity.CENTER);footer.setPadding(0,Ui.dp(this,24),0,0);body.addView(footer);root.requestFocus();
     }
     private void section(String title){TextView t=Ui.text(this,title,12,Ui.MUTED);t.setPadding(Ui.dp(this,14),Ui.dp(this,22),0,Ui.dp(this,8));body.addView(t);}

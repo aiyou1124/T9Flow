@@ -2,7 +2,6 @@ package com.qingdial.app;
 
 import android.Manifest;
 import android.app.*;
-import android.app.role.RoleManager;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.database.*;
@@ -10,7 +9,6 @@ import android.icu.text.Transliterator;
 import android.net.Uri;
 import android.os.*;
 import android.provider.*;
-import android.telecom.*;
 import android.text.*;
 import android.view.*;
 import android.widget.*;
@@ -39,17 +37,17 @@ public class MainActivity extends HomeAwareActivity {
     private static final long CACHE_FRESH_MS=5*60*1000L;
     private final Runnable changedData=this::reload;
     private static class Snapshot implements java.io.Serializable {
-        private static final long serialVersionUID=1L;
+        private static final long serialVersionUID=3L;
         ArrayList<SearchIndex> contacts;ArrayList<Recent> recents;long savedAt;boolean contactsAllowed,logsAllowed;
     }
+    private static class Recent implements java.io.Serializable {private static final long serialVersionUID=1L;String name,number;int type;long date,duration;Recent(String n,String p,int t,long d,long s){name=n;number=p;type=t;date=d;duration=s;}}
     private String dataError="";
     private final ContentObserver observer=new ContentObserver(handler){@Override public void onChange(boolean self){dataDirty=true;if(foreground){handler.removeCallbacks(changedData);handler.postDelayed(changedData,300);}}};
-    private static class Recent implements java.io.Serializable {private static final long serialVersionUID=1L;String name,number;int type;long date,duration;Recent(String n,String p,int t,long d,long s){name=n;number=p;type=t;date=d;duration=s;}}
-    @Override public void onCreate(Bundle b){super.onCreate(b);feedback=new KeyFeedback(this);build();readIntent(getIntent());render();if(b==null)handler.post(this::onboarding);}
+    @Override public void onCreate(Bundle b){super.onCreate(b);feedback=new KeyFeedback(this);deleteFile("local-cache-v1.bin");deleteFile("contacts-cache-v2.bin");build();readIntent(getIntent());render();if(b==null)handler.post(this::onboarding);}
     @Override public void onSaveInstanceState(Bundle b){super.onSaveInstanceState(b);b.putInt("tab",tab);b.putString("query",search.getText().toString());}
     @Override protected void onNewIntent(Intent i){super.onNewIntent(i);setIntent(i);readIntent(i);}
     private void readIntent(Intent i){if(i.getBooleanExtra("home",false)||i.getData()==null)showDialHome();if(i.getData()!=null && "tel".equals(i.getData().getScheme())){tab=0;search.setText(i.getData().getSchemeSpecificPart());render();}}
-    @Override protected void onResume(){super.onResume();foreground=true;getContentResolver().unregisterContentObserver(observer);ensureData();renderCallButtons();try{getContentResolver().registerContentObserver(ContactsContract.Contacts.CONTENT_URI,true,observer);if(has(Manifest.permission.READ_CALL_LOG))getContentResolver().registerContentObserver(CallLog.Calls.CONTENT_URI,true,observer);}catch(SecurityException ignored){}status();}
+    @Override protected void onResume(){super.onResume();foreground=true;getContentResolver().unregisterContentObserver(observer);ensureData();renderCallButtons();if(has(Manifest.permission.READ_CONTACTS))try{getContentResolver().registerContentObserver(ContactsContract.Contacts.CONTENT_URI,true,observer);}catch(SecurityException ignored){}if(has(Manifest.permission.READ_CALL_LOG))try{getContentResolver().registerContentObserver(CallLog.Calls.CONTENT_URI,true,observer);}catch(SecurityException ignored){}status();}
     @Override protected void onPause(){super.onPause();foreground=false;handler.removeCallbacks(changedData);}
     @Override protected void onDestroy(){super.onDestroy();getContentResolver().unregisterContentObserver(observer);generation++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();searchWorker.shutdownNow();feedback.close();}
     private boolean has(String p){
@@ -59,7 +57,6 @@ public class MainActivity extends HomeAwareActivity {
         int mode=getSystemService(AppOpsManager.class).unsafeCheckOpNoThrow(op,android.os.Process.myUid(),getPackageName());
         return mode!=AppOpsManager.MODE_IGNORED&&mode!=AppOpsManager.MODE_ERRORED;
     }
-    private boolean isDefault(){return getPackageName().equals(getSystemService(TelecomManager.class).getDefaultDialerPackage());}
     private void build(){
         root=Ui.column(this);root.setBackgroundColor(Ui.BG);root.setFocusableInTouchMode(true);setContentView(root);Ui.edge(this,root);
         LinearLayout header=Ui.row(this);
@@ -102,48 +99,27 @@ public class MainActivity extends HomeAwareActivity {
         }
     }
     private void render(){title.setText(tab==0?"电话":tab==1?"通讯录":"最近通话");keypad.setVisibility(tab==0?View.VISIBLE:View.GONE);renderNav();renderResults();}
-    private void status(){boolean ready=isDefault()&&has(Manifest.permission.READ_CONTACTS)&&has(Manifest.permission.CALL_PHONE)&&has(Manifest.permission.READ_CALL_LOG);banner.setText(ready?"✓ 默认电话应用 · 本机搜索":"启用轻拨 · 设置默认电话与权限");banner.setVisibility(ready?View.GONE:View.VISIBLE);}
+    private void status(){boolean ready=has(Manifest.permission.READ_CONTACTS);banner.setText("允许通讯录权限 · 启用中文 T9 搜索");banner.setVisibility(ready?View.GONE:View.VISIBLE);}
     private void onboarding(){
-        if(isFinishing()||getSharedPreferences("settings",0).getBoolean("onboarding_seen",false))return;
-        new AlertDialog.Builder(this).setTitle("欢迎使用轻拨")
-            .setMessage("几步设置，让拨号更顺手。\n\n① 设为默认电话，接听和拨打电话\n② 允许通讯录，支持中文与拼音快搜\n③ 允许通话记录和通知，查看最近通话、显示来电\n\n你同意系统授权后，轻拨会自动读取并显示本机数据，不会上传。")
-            .setCancelable(false)
-            .setPositiveButton("开始使用",(d,w)->{getSharedPreferences("settings",0).edit().putBoolean("onboarding_seen",true).apply();setup();})
-            .setNegativeButton("稍后设置",(d,w)->getSharedPreferences("settings",0).edit().putBoolean("onboarding_seen",true).apply()).show();
+        if(isFinishing()||getSharedPreferences("settings",0).getBoolean("onboarding_search_v2",false))return;
+        ThemeDialog.message(this,"轻拨 · T9 快搜","轻拨只负责查找联系人。\n\n① 允许读取通讯录，按拼音首字母或数字查找\n② 点击结果或拨号，直接发起呼叫\n③ 首次拨打允许电话权限，通话界面由系统显示\n④ 可选允许读取通话记录，仅用于本机统计\n\n接听、通话和通话记录均由系统电话处理。通讯录仅在本机处理，不上传。"
+            ,AppIcon.CONTACTS,"开始使用",()->{getSharedPreferences("settings",0).edit().putBoolean("onboarding_search_v2",true).apply();setup();},
+            "稍后",()->getSharedPreferences("settings",0).edit().putBoolean("onboarding_search_v2",true).apply(),false);
     }
     private void setup(){
-        if(!isDefault()){
-            try{if(Build.VERSION.SDK_INT>=29){RoleManager rm=getSystemService(RoleManager.class);if(rm.isRoleAvailable(RoleManager.ROLE_DIALER)){startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_DIALER),20);return;}}
-            else {startActivityForResult(new Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER).putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME,getPackageName()),20);return;}}
-            catch(ActivityNotFoundException e){toast("此设备不支持设置默认电话应用");}
-        }permissions();
+        if(has(Manifest.permission.READ_CONTACTS)){status();ensureData();return;}
+        if(checkSelfPermission(Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED)startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));
+        else requestAppPermissions(new String[]{Manifest.permission.READ_CONTACTS},21);
     }
-    private void permissions(){ArrayList<String> ps=new ArrayList<>();for(String p:new String[]{Manifest.permission.READ_CONTACTS,Manifest.permission.CALL_PHONE,Manifest.permission.READ_PHONE_STATE})if(!has(p))ps.add(p);if(isDefault()&&!has(Manifest.permission.READ_CALL_LOG))ps.add(Manifest.permission.READ_CALL_LOG);if(Build.VERSION.SDK_INT>=33&&!has(Manifest.permission.POST_NOTIFICATIONS))ps.add(Manifest.permission.POST_NOTIFICATIONS);if(!ps.isEmpty()){boolean restricted=false;for(String p:ps)if(checkSelfPermission(p)==PackageManager.PERMISSION_GRANTED&&!has(p))restricted=true;if(restricted){toast("请在系统设置中允许通讯录和通话记录访问");startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}else requestPermissions(ps.toArray(new String[0]),21);}else{status();reload();}}
-    @Override protected void onActivityResult(int r,int c,Intent d){super.onActivityResult(r,c,d);if(r==20){status();permissions();}else if(r==31&&c==RESULT_OK&&d!=null&&d.getIntExtra("navigation_epoch",-1)==((DialApplication)getApplication()).navigationEpoch()){if("setup".equals(d.getStringExtra("settings_action")))setup();else{tab=d.getIntExtra("tab",0);textEntryMode=false;search.setText("");render();}}}
+    @Override protected void onActivityResult(int r,int c,Intent d){super.onActivityResult(r,c,d);if(r==31&&c==RESULT_OK&&d!=null&&d.getIntExtra("navigation_epoch",-1)==((DialApplication)getApplication()).navigationEpoch()){if("setup".equals(d.getStringExtra("settings_action")))setup();else{tab=Math.max(0,Math.min(2,d.getIntExtra("tab",0)));textEntryMode=false;search.setText("");render();if(tab==2&&!has(Manifest.permission.READ_CALL_LOG))requestAppPermissions(new String[]{Manifest.permission.READ_CALL_LOG},22);}}}
     @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);status();reload();}
     private void settings(){startActivityForResult(new Intent(this,SettingsActivity.class),31);}
     void showDialHome(){if(search==null)return;tab=0;textEntryMode=false;search.setText("");search.clearFocus();render();}
     private void renderCallButtons(){
         if(callActions==null)return;callActions.removeAllViews();
-        List<PhoneAccountHandle> accounts=new ArrayList<>();
-        if(getSharedPreferences("settings",0).getBoolean("dual_sim_buttons",false)&&has(Manifest.permission.READ_PHONE_STATE)){
-            try{TelecomManager tm=getSystemService(TelecomManager.class);for(PhoneAccountHandle account:tm.getCallCapablePhoneAccounts()){PhoneAccount pa=tm.getPhoneAccount(account);if(pa!=null&&pa.hasCapabilities(PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION))accounts.add(account);}}catch(SecurityException ignored){}
-        }
-        if(accounts.size()>=2){Map<PhoneAccountHandle,Integer> slots=new HashMap<>();for(int i=0;i<accounts.size();i++)slots.put(accounts.get(i),simNumber(accounts.get(i),i+1));accounts.sort((a,b)->Integer.compare(slots.get(a),slots.get(b)));for(int i=0;i<2;i++){PhoneAccountHandle account=accounts.get(i);PhoneAccount pa=getSystemService(TelecomManager.class).getPhoneAccount(account);String label=pa==null?"拨号":String.valueOf(pa.getLabel());dialButton(label,account,slots.get(account));}}
-        else dialButton("拨号",null,0);
-    }
-    private int simNumber(PhoneAccountHandle account,int fallback){
-        if(Build.VERSION.SDK_INT>=30)try{android.telephony.TelephonyManager phone=getSystemService(android.telephony.TelephonyManager.class).createForPhoneAccountHandle(account);if(phone!=null){android.telephony.SubscriptionInfo info=getSystemService(android.telephony.SubscriptionManager.class).getActiveSubscriptionInfo(phone.getSubscriptionId());if(info!=null&&info.getSimSlotIndex()>=0)return info.getSimSlotIndex()+1;}}catch(SecurityException ignored){}
-        return fallback;
-    }
-    private void dialButton(String label,PhoneAccountHandle account,int simNumber){
-        boolean dual=simNumber>0;
-        LinearLayout button=Ui.row(this);button.setGravity(Gravity.CENTER);button.setBackground(ripple(0xff28b45c,25));button.setContentDescription(label+"，拨打第一条匹配联系人");button.setOnClickListener(v->callTyped(account));
-        android.widget.FrameLayout symbol=new android.widget.FrameLayout(this);symbol.addView(new AppIcon(this,AppIcon.PHONE,0xffffffff),new android.widget.FrameLayout.LayoutParams(Ui.dp(this,30),Ui.dp(this,30),Gravity.LEFT|Gravity.CENTER_VERTICAL));
-        if(dual){TextView badge=Ui.text(this,String.valueOf(simNumber),8,0xffffffff);badge.setTypeface(null,android.graphics.Typeface.BOLD);badge.setGravity(Gravity.CENTER);badge.setIncludeFontPadding(false);android.widget.FrameLayout.LayoutParams bp=new android.widget.FrameLayout.LayoutParams(Ui.dp(this,10),Ui.dp(this,14),Gravity.TOP|Gravity.RIGHT);bp.topMargin=Ui.dp(this,3);bp.rightMargin=Ui.dp(this,3);symbol.addView(badge,bp);button.setContentDescription("卡"+simNumber+"，"+label+"，拨打第一条匹配联系人");}
-        button.addView(symbol,new LinearLayout.LayoutParams(Ui.dp(this,dual?26:30),Ui.dp(this,32)));
-        TextView text=Ui.text(this,label,dual?13:16,0xffffffff);text.setSingleLine(true);text.setEllipsize(android.text.TextUtils.TruncateAt.END);text.setMaxWidth(Ui.dp(this,100));text.setPadding(Ui.dp(this,3),0,Ui.dp(this,7),0);button.addView(text);
-        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dual?0:Ui.dp(this,156),Ui.dp(this,46),dual?1:0);if(dual)lp.setMargins(Ui.dp(this,6),0,Ui.dp(this,6),0);callActions.addView(button,lp);
+        LinearLayout button=Ui.row(this);button.setGravity(Gravity.CENTER);button.setBackground(ripple(0xff28b45c,25));button.setContentDescription("拨打第一条匹配号码");button.setOnClickListener(v->callTyped());
+        button.addView(new AppIcon(this,AppIcon.PHONE,0xffffffff),new LinearLayout.LayoutParams(Ui.dp(this,30),Ui.dp(this,32)));
+        TextView text=Ui.text(this,"拨号",16,0xffffffff);text.setPadding(Ui.dp(this,3),0,Ui.dp(this,7),0);button.addView(text);callActions.addView(button,new LinearLayout.LayoutParams(Ui.dp(this,156),Ui.dp(this,46)));
     }
     private void ensureData(){
         boolean contactsAllowed=has(Manifest.permission.READ_CONTACTS),logsAllowed=has(Manifest.permission.READ_CALL_LOG);
@@ -152,7 +128,7 @@ public class MainActivity extends HomeAwareActivity {
         cacheLoaded=true;final int token=++generation;
         worker.execute(()->{
             Snapshot cached=null;
-            try(java.io.ObjectInputStream input=new java.io.ObjectInputStream(new android.util.AtomicFile(new java.io.File(getFilesDir(),"local-cache-v1.bin")).openRead())){Object value=input.readObject();if(value instanceof Snapshot)cached=(Snapshot)value;}catch(java.io.IOException|ClassNotFoundException|RuntimeException ignored){}
+            try(java.io.ObjectInputStream input=new java.io.ObjectInputStream(new android.util.AtomicFile(new java.io.File(getFilesDir(),"data-cache-v3.bin")).openRead())){Object value=input.readObject();if(value instanceof Snapshot)cached=(Snapshot)value;}catch(java.io.IOException|ClassNotFoundException|RuntimeException ignored){}
             Snapshot result=cached;handler.post(()->{
                 if(isDestroyed()||token!=generation)return;
                 boolean readContacts=has(Manifest.permission.READ_CONTACTS),readLogs=has(Manifest.permission.READ_CALL_LOG);
@@ -163,7 +139,7 @@ public class MainActivity extends HomeAwareActivity {
     }
     private void saveCache(ArrayList<SearchIndex> cs,ArrayList<Recent> rs,boolean contactsAllowed,boolean logsAllowed,long savedAt){
         Snapshot snapshot=new Snapshot();snapshot.contacts=cs;snapshot.recents=rs;snapshot.savedAt=savedAt;snapshot.contactsAllowed=contactsAllowed;snapshot.logsAllowed=logsAllowed;
-        android.util.AtomicFile file=new android.util.AtomicFile(new java.io.File(getFilesDir(),"local-cache-v1.bin"));java.io.FileOutputStream stream=null;
+        android.util.AtomicFile file=new android.util.AtomicFile(new java.io.File(getFilesDir(),"data-cache-v3.bin"));java.io.FileOutputStream stream=null;
         try{stream=file.startWrite();java.io.ObjectOutputStream output=new java.io.ObjectOutputStream(stream);output.writeObject(snapshot);output.flush();file.finishWrite(stream);}catch(java.io.IOException|RuntimeException ignored){if(stream!=null)file.failWrite(stream);}
     }
     private void reload(){dataDirty=false;int token=++generation;boolean readContacts=has(Manifest.permission.READ_CONTACTS),readLogs=has(Manifest.permission.READ_CALL_LOG);worker.execute(()->{
@@ -175,14 +151,14 @@ public class MainActivity extends HomeAwareActivity {
     });}
     private void renderResults(){if(results==null)return;results.setVisibility(View.VISIBLE);searchGeneration++;if(pendingSearch!=null)handler.removeCallbacks(pendingSearch);String q=search.getText().toString().trim();if(tab==2||q.isEmpty()||!dataError.isEmpty()||!has(Manifest.permission.READ_CONTACTS))results.removeAllViews();count.setVisibility(tab==0?View.GONE:View.VISIBLE);
         if(!dataError.isEmpty()){empty(dataError);return;}
-        if(tab==2){renderHistory(q);return;}
+        if(tab==2){results.removeAllViews();renderHistory(q);return;}
         if(!has(Manifest.permission.READ_CONTACTS)){count.setText("中文 · 全拼 · 首字母 · T9");empty("允许通讯录权限后，即可搜索联系人");return;}
         
         searchContacts(q);
     }
     private void renderHistory(String query){
         count.setText("最近 500 条记录 · 点击回拨");
-        if(!has(Manifest.permission.READ_CALL_LOG)){empty("设置为默认电话并允许读取通话记录");return;}
+        if(!has(Manifest.permission.READ_CALL_LOG)){results.addView(Ui.text(this,"允许读取通话记录后，即可查看统计",14,Ui.MUTED));results.addView(Ui.button(this,"允许读取通话记录",Ui.GREEN,()->requestAppPermissions(new String[]{Manifest.permission.READ_CALL_LOG},22)));return;}
         long incomingSeconds=0,outgoingSeconds=0;int incomingCount=0,outgoingCount=0;
         for(Recent r:recents){if(r.type==CallLog.Calls.INCOMING_TYPE){incomingSeconds+=Math.max(0,r.duration);incomingCount++;}else if(r.type==CallLog.Calls.OUTGOING_TYPE){outgoingSeconds+=Math.max(0,r.duration);outgoingCount++;}}
         LinearLayout summary=Ui.row(this);
@@ -217,21 +193,19 @@ public class MainActivity extends HomeAwareActivity {
         results.setVisibility(View.INVISIBLE);
         final int token=searchGeneration;
         final List<SearchIndex> snapshot=contacts;
+        final PinOrder pins=ContactPins.read(this);
         pendingSearch=()->searchWorker.execute(()->{
-            SearchIndex.Query query=new SearchIndex.Query(q);
-            ArrayList<SearchIndex> matches=new ArrayList<>();
-            Map<SearchIndex,Integer> scores=new IdentityHashMap<>();
-            for(SearchIndex contact:snapshot){
-                if(Thread.currentThread().isInterrupted())return;
-                int score=contact.score(query);
-                if(score>0){matches.add(contact);scores.put(contact,score);}
-            }
-            matches.sort((a,b)->Integer.compare(scores.get(b),scores.get(a)));
+            List<SearchIndex> matches=pins.matches(snapshot,q);
             handler.post(()->{
                 if(isDestroyed()||token!=searchGeneration)return;
-                results.setVisibility(View.VISIBLE);results.removeAllViews();count.setText(matches.size()+" 个匹配 · 点击联系人拨号");
+                results.setVisibility(View.VISIBLE);results.removeAllViews();count.setText(matches.size()+" 个匹配 · 长按置顶或调整顺序");
                 for(SearchIndex contact:matches.subList(0,Math.min(100,matches.size()))){
-                    TextView label=addPerson(contact.name,contact.number,contact.number,false);
+                    int pinnedAt=pins.position(contact.name,contact.number);
+                    String detail=pinnedAt<0?contact.number:"置顶 "+(pinnedAt+1)+" · "+contact.number;
+                    TextView label=addPerson(contact.name,contact.number,detail,false);
+                    View row=(View)label.getParent().getParent();
+                    row.setOnLongClickListener(v->{ContactPins.actions(this,contact.name,contact.number,this::renderResults);return true;});
+                    if(pinnedAt>=0){TextView secondary=(TextView)((LinearLayout)label.getParent()).getChildAt(1);android.text.SpannableString badge=new android.text.SpannableString(detail);badge.setSpan(new android.text.style.ForegroundColorSpan(Ui.GREEN),0,detail.indexOf(" ·"),android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);secondary.setText(badge);}
                     android.text.SpannableString highlighted=new android.text.SpannableString(contact.name);
                     for(int at:contact.matchedNamePositions(q)){
                         int end=at+Character.charCount(contact.name.codePointAt(at));
@@ -240,7 +214,7 @@ public class MainActivity extends HomeAwareActivity {
                     }
                     label.setText(highlighted);
                 }
-                if(matches.isEmpty())empty(loaded?"未找到联系人，可直接拨打输入的号码":"正在读取…");
+                if(matches.isEmpty())empty(loaded?"未找到联系人，可直接拨打输入号码":"正在读取…");
                 else if(matches.size()>100)results.addView(Ui.text(this,"显示前 100 个结果，请继续输入缩小范围",12,Ui.MUTED));
             });
         });
@@ -254,18 +228,14 @@ public class MainActivity extends HomeAwareActivity {
         TextView nameView=Ui.text(this,name==null||name.isEmpty()?"未知号码":name,20,missed?0xffcc4e4e:0xff4bab7d);nameView.setSingleLine(true);nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);labels.addView(nameView);
         TextView secondary=Ui.text(this,detail==null?"隐藏号码":detail,14,0xff777777);secondary.setSingleLine(true);secondary.setEllipsize(android.text.TextUtils.TruncateAt.END);labels.addView(secondary);
         row.addView(labels,new LinearLayout.LayoutParams(0,Ui.dp(this,50),1));
-        AppIcon arrow=new AppIcon(this,AppIcon.CHEVRON,0xffa6a6a6);arrow.setBackground(Ui.bg(0xfff3f3f3,Ui.dp(this,18)));arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);arrow.setContentDescription("查看联系人通话详情");arrow.setOnClickListener(v->startActivity(new Intent(this,ContactDetailsActivity.class).putExtra("name",name).putExtra("number",number)));row.addView(arrow,new LinearLayout.LayoutParams(Ui.dp(this,36),Ui.dp(this,40)));
-        row.setContentDescription((name==null?"未知号码":name)+"，"+detail+"，拨打");row.setOnClickListener(v->place(number));results.addView(row,new LinearLayout.LayoutParams(-1,Ui.dp(this,76)));return nameView;
+        AppIcon arrow=new AppIcon(this,AppIcon.CHEVRON,0xffa6a6a6);arrow.setBackground(Ui.bg(0xfff3f3f3,Ui.dp(this,18)));arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);arrow.setContentDescription("查看联系人详情");arrow.setOnClickListener(v->startActivity(new Intent(this,ContactDetailsActivity.class).putExtra("name",name).putExtra("number",number)));row.addView(arrow,new LinearLayout.LayoutParams(Ui.dp(this,36),Ui.dp(this,40)));
+        row.setContentDescription((name==null?"未知号码":name)+"，"+detail+"，拨打电话");row.setOnClickListener(v->place(number));results.addView(row,new LinearLayout.LayoutParams(-1,Ui.dp(this,76)));return nameView;
     }
-    private void callTyped(PhoneAccountHandle account){
-        String query=search.getText().toString().trim();
-        if(query.isEmpty()){toast("请先输入姓名或号码");return;}
-        SearchIndex first=SearchIndex.firstMatch(contacts,query);
-        if(first!=null){place(first.number,account);return;}
-        if(query.matches("[+0-9*#(),; .-]+"))place(query,account);
-        else toast("没有匹配的联系人");
+    private void callTyped(){
+        String query=search.getText().toString().trim();if(query.isEmpty()){toast("请先输入姓名或号码");return;}
+        SearchIndex first=ContactPins.read(this).firstMatch(contacts,query);if(first!=null){place(first.number);return;}
+        if(query.matches("[+0-9*#(),; .-]+"))place(query);else toast("没有匹配的联系人");
     }
-    private void place(String number){place(number,null);}
-    private void place(String number,PhoneAccountHandle account){if(number==null||!number.matches("[+0-9*#(),; .-]+")){toast("该记录没有可拨打的号码");return;}if(!isDefault()||!has(Manifest.permission.CALL_PHONE)){toast("请先设置默认电话并允许拨号权限");setup();return;}try{Bundle extras=new Bundle();if(account!=null)extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,account);getSystemService(TelecomManager.class).placeCall(Uri.fromParts("tel",number.replace(" ","").replace("-",""),null),extras);}catch(SecurityException|IllegalArgumentException e){toast("拨号失败，请检查电话权限、SIM 卡与系统设置");}}
+    private void place(String number){SystemDialer.open(this,number);}
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
 }

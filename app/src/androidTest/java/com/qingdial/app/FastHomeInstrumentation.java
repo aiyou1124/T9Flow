@@ -20,7 +20,7 @@ public final class FastHomeInstrumentation extends Instrumentation {
                 input();desktopAndReturn("dialer input",delay,null);
                 Activity settings=open("设置",SettingsActivity.class);
                 desktopAndReturn("settings",delay,settings);
-                Activity details=open("查看联系人通话详情",ContactDetailsActivity.class);
+                Activity details=open("查看联系人详情",ContactDetailsActivity.class);
                 desktopAndReturn("contact details",delay,details);
             }
             result.putString("stream","PASS: "+checks+" Home reset checks before relaunch (0/40/120ms task-return attempts); no calls placed.\n");finish(Activity.RESULT_OK,result);
